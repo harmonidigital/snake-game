@@ -75,6 +75,7 @@
         let level = 1;
         let time = 0;
         let timerInterval;
+        let baseSpeed = 150; // Slower base speed
         const scoreEl = document.getElementById('score');
         const timerEl = document.getElementById('timer');
         const levelEl = document.getElementById('level');
@@ -146,7 +147,14 @@
             if (head.y >= canvas.height) head.y = 0;
 
             enemySnake.unshift(head);
-            enemySnake.pop();
+
+            // Check if enemy snake eats food
+            if (head.x === food.x && head.y === food.y) {
+                // Enemy snake grows
+                food = spawnFood();
+            } else {
+                enemySnake.pop();
+            }
         }
 
         function draw() {
@@ -194,9 +202,9 @@
                 if (snake.length % 5 === 0) {
                     level++;
                     levelEl.textContent = 'Level: ' + level;
-                    // Increase speed by reducing interval
+                    // Increase speed by reducing interval, but keep it slower
                     clearInterval(gameLoop);
-                    gameLoop = setInterval(draw, Math.max(50, 100 - (level * 5)));
+                    gameLoop = setInterval(draw, Math.max(80, baseSpeed - (level * 5)));
                 }
             } else {
                 snake.pop();
@@ -229,7 +237,7 @@
             restartBtn.hidden = true;
             clearInterval(gameLoop);
             clearInterval(timerInterval);
-            gameLoop = setInterval(draw, 100);
+            gameLoop = setInterval(draw, baseSpeed);
             timerInterval = setInterval(() => {
                 time++;
                 timerEl.textContent = 'Time: ' + time;
