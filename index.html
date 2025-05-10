@@ -29,6 +29,22 @@
             font-size: 1.5rem;
         }
 
+        #timer {
+            position: fixed;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+        }
+
+        #level {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+        }
+
         button {
             position: fixed;
             bottom: 20px;
@@ -43,16 +59,25 @@
 <body>
     <canvas id="game" width="400" height="400"></canvas>
     <div id="score">Score: 0</div>
+    <div id="timer">Time: 0</div>
+    <div id="level">Level: 1</div>
     <button id="restart" hidden>Restart</button>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const box = 20;
         let snake = [{ x: 9 * box, y: 10 * box }];
+        let enemySnake = [{ x: 5 * box, y: 5 * box }];
+        let enemyDirection = 'RIGHT';
         let direction = 'RIGHT';
         let food = spawnFood();
         let score = 0;
+        let level = 1;
+        let time = 0;
+        let timerInterval;
         const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const levelEl = document.getElementById('level');
         const restartBtn = document.getElementById('restart');
 
         document.addEventListener('keydown', e => {
@@ -72,13 +97,74 @@
             };
         }
 
+        function moveEnemySnake() {
+            if (level < 3) return;
+
+            // Simple AI: 70% chance to move towards food, 30% chance to move randomly
+            if (Math.random() < 0.7) {
+                const head = enemySnake[0];
+                const possibleDirections = [];
+
+                // Check which directions are valid
+                if (head.x > food.x && !collision({ x: head.x - box, y: head.y }, enemySnake)) possibleDirections.push('LEFT');
+                if (head.x < food.x && !collision({ x: head.x + box, y: head.y }, enemySnake)) possibleDirections.push('RIGHT');
+                if (head.y > food.y && !collision({ x: head.x, y: head.y - box }, enemySnake)) possibleDirections.push('UP');
+                if (head.y < food.y && !collision({ x: head.x, y: head.y + box }, enemySnake)) possibleDirections.push('DOWN');
+
+                if (possibleDirections.length > 0) {
+                    enemyDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+                }
+            } else {
+                // Random movement
+                const directions = ['LEFT', 'UP', 'RIGHT', 'DOWN'];
+                const possibleDirections = directions.filter(dir => {
+                    const head = enemySnake[0];
+                    let newHead = { ...head };
+                    if (dir === 'LEFT') newHead.x -= box;
+                    if (dir === 'UP') newHead.y -= box;
+                    if (dir === 'RIGHT') newHead.x += box;
+                    if (dir === 'DOWN') newHead.y += box;
+                    return !collision(newHead, enemySnake) &&
+                        newHead.x >= 0 && newHead.x < canvas.width &&
+                        newHead.y >= 0 && newHead.y < canvas.height;
+                });
+                if (possibleDirections.length > 0) {
+                    enemyDirection = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+                }
+            }
+
+            let head = { ...enemySnake[0] };
+            if (enemyDirection === 'LEFT') head.x -= box;
+            if (enemyDirection === 'UP') head.y -= box;
+            if (enemyDirection === 'RIGHT') head.x += box;
+            if (enemyDirection === 'DOWN') head.y += box;
+
+            // Keep enemy snake within bounds
+            if (head.x < 0) head.x = canvas.width - box;
+            if (head.x >= canvas.width) head.x = 0;
+            if (head.y < 0) head.y = canvas.height - box;
+            if (head.y >= canvas.height) head.y = 0;
+
+            enemySnake.unshift(head);
+            enemySnake.pop();
+        }
+
         function draw() {
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Draw player snake
             for (let i = 0; i < snake.length; i++) {
                 ctx.fillStyle = i == 0 ? '#0f0' : '#070';
                 ctx.fillRect(snake[i].x, snake[i].y, box - 1, box - 1);
+            }
+
+            // Draw enemy snake if level >= 3
+            if (level >= 3) {
+                for (let i = 0; i < enemySnake.length; i++) {
+                    ctx.fillStyle = i == 0 ? '#f00' : '#700';
+                    ctx.fillRect(enemySnake[i].x, enemySnake[i].y, box - 1, box - 1);
+                }
             }
 
             ctx.fillStyle = '#f00';
@@ -91,7 +177,8 @@
             if (direction === 'DOWN') head.y += box;
 
             // collision with walls
-            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height || collision(head, snake)) {
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height ||
+                collision(head, snake) || (level >= 3 && collision(head, enemySnake))) {
                 gameOver();
                 return;
             }
@@ -99,12 +186,24 @@
             snake.unshift(head);
 
             if (head.x == food.x && head.y == food.y) {
-                score++;
+                score += level * 10;
                 scoreEl.textContent = 'Score: ' + score;
                 food = spawnFood();
+
+                // Level up every 5 food items
+                if (snake.length % 5 === 0) {
+                    level++;
+                    levelEl.textContent = 'Level: ' + level;
+                    // Increase speed by reducing interval
+                    clearInterval(gameLoop);
+                    gameLoop = setInterval(draw, Math.max(50, 100 - (level * 5)));
+                }
             } else {
                 snake.pop();
             }
+
+            // Move enemy snake
+            moveEnemySnake();
         }
 
         function collision(head, array) {
@@ -117,16 +216,29 @@
         let gameLoop;
         function startGame() {
             snake = [{ x: 9 * box, y: 10 * box }];
+            enemySnake = [{ x: 5 * box, y: 5 * box }];
+            enemyDirection = 'RIGHT';
             direction = 'RIGHT';
             food = spawnFood();
             score = 0;
+            level = 1;
+            time = 0;
             scoreEl.textContent = 'Score: 0';
+            levelEl.textContent = 'Level: 1';
+            timerEl.textContent = 'Time: 0';
             restartBtn.hidden = true;
             clearInterval(gameLoop);
+            clearInterval(timerInterval);
             gameLoop = setInterval(draw, 100);
+            timerInterval = setInterval(() => {
+                time++;
+                timerEl.textContent = 'Time: ' + time;
+            }, 1000);
         }
+
         function gameOver() {
             clearInterval(gameLoop);
+            clearInterval(timerInterval);
             restartBtn.hidden = false;
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -134,6 +246,10 @@
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+            ctx.font = '20px Arial';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText(`Level: ${level}`, canvas.width / 2, canvas.height / 2 + 70);
+            ctx.fillText(`Time: ${time}s`, canvas.width / 2, canvas.height / 2 + 100);
         }
 
         startGame();
